@@ -1,10 +1,10 @@
 #include <stdint.h>
 
 #include "bits.h"
-#include "int_vector.h"
-
 #include "clock.h"
+#include "int_vector.h"
 #include "reg.h"
+#include "wdt.h"
 
 extern char * __data_load__;
 extern char *__data_start__;
@@ -33,6 +33,8 @@ NAKED void init()
   enable_main_xtal();
   enable_plla();
   switch_to_plla();
+
+  wdt_disable();
 
   main();
 }

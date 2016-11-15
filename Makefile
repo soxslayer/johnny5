@@ -1,9 +1,11 @@
 SRCS:= \
+  basic_uart.c \
   clock.c \
   init.c \
   int_vector.c \
   main.c \
-  vector_tbl.c
+  vector_tbl.c \
+  wdt.c
 
 vpath %.h src
 vpath %.c src
