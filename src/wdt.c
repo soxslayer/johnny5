@@ -1,8 +1,8 @@
 #include "wdt.h"
 
-#include "reg.h"
+#include "sam3x8e.h"
 
 void wdt_disable()
 {
-  WDT_MR = WDDIS;
+  Wdt.mr = _b(15);
 }

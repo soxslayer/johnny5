@@ -1,10 +1,30 @@
 SRCS:= \
+  assert.c \
+  atomic.c \
   basic_uart.c \
+  chardev.c \
   clock.c \
+  ctx_switch.s \
+  div0.c \
+  fault.s \
+  handle_array.c \
+  hash_table.c \
+  heap.c \
+  idle.c \
   init.c \
-  int_vector.c \
+  intrinsic.s \
+  list.c \
   main.c \
-  vector_tbl.c \
+  mem.c \
+  nvic.c \
+  sem.c \
+  signal.c \
+  spinlock.c \
+  string.c \
+  task.c \
+  uidivmod.s \
+  uldivmod.s \
+  vec_tbl.c \
   wdt.c
 
 vpath %.h src
@@ -35,18 +55,18 @@ CFLAGS:= \
   -nostdlib \
   -nostartfiles \
   -ffreestanding \
-  -mhard-float \
   -mcpu=cortex-m3 \
   -mthumb \
   -mno-thumb-interwork \
   -mfix-cortex-m3-ldrd \
+  -fno-omit-frame-pointer \
+  -mapcs-frame \
   -g
 LDFLAGS:= \
   -T $(MEMORY_LAYOUT)
 ASFLAGS:= \
   --warn \
   --fatal-warnings \
-  -mfloat-abi=hard \
   -mcpu=cortex-m3 \
   -mthumb \
   -g

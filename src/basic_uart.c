@@ -1,11 +1,12 @@
 #include "basic_uart.h"
 
 #include "bits.h"
-#include "reg.h"
+#include "clock.h"
+#include "sam3x8e.h"
 
-static uint8_t nibble_to_ascii(uint8_t n)
+static u8 nibble_to_ascii(u8 n)
 {
-  uint8_t nib = n & 0xf;
+  u8 nib = n & 0xf;
 
   if (nib < 0xa)
     return nib + '0';
@@ -15,21 +16,21 @@ static uint8_t nibble_to_ascii(uint8_t n)
 
 void basic_uart_init()
 {
-  PMC_PCER0 = PID8;
+  Pmc.pcer0 = _b(8);
   /* 115200 baud */
-  UART_BRGR = CD(0x2e);
-  UART_MR = PAR(PAR_NO);
-  UART_CR = TXEN;
-  PIO_PDRA = P9;
+  Uart0.brgr = (clock_speed / 1843200) & 0xffff;
+  Uart0.mr = _bm(0x4, 9);
+  Uart0.cr = _b(6);
+  PioA.pdr = _b(9);
 }
 
-void basic_uart_tx_byte(uint8_t b)
+void basic_uart_tx_byte(u8 b)
 {
-  while_bits_clr(UART_SR, TXRDY);
-  UART_THR = TXCHR(b);
+  while_bits_clr(Uart0.sr, _b(1));
+  Uart0.thr = b;
 }
 
-void basic_uart_tx_u8(uint8_t c)
+void basic_uart_tx_u8(u8 c)
 {
   basic_uart_tx_byte('0');
   basic_uart_tx_byte('x');
@@ -37,7 +38,7 @@ void basic_uart_tx_u8(uint8_t c)
   basic_uart_tx_byte(nibble_to_ascii(c));
 }
 
-void basic_uart_tx_u16(uint16_t c)
+void basic_uart_tx_u16(u16 c)
 {
   basic_uart_tx_byte('0');
   basic_uart_tx_byte('x');
@@ -47,7 +48,7 @@ void basic_uart_tx_u16(uint16_t c)
   basic_uart_tx_byte(nibble_to_ascii(c));
 }
 
-void basic_uart_tx_u32(uint32_t c)
+void basic_uart_tx_u32(u32 c)
 {
   basic_uart_tx_byte('0');
   basic_uart_tx_byte('x');
@@ -59,6 +60,12 @@ void basic_uart_tx_u32(uint32_t c)
   basic_uart_tx_byte(nibble_to_ascii(c >> 8));
   basic_uart_tx_byte(nibble_to_ascii(c >> 4));
   basic_uart_tx_byte(nibble_to_ascii(c));
+}
+
+void basic_uart_tx_str(const char *s)
+{
+  for (int i = 0; s[i] != 0; ++i)
+    basic_uart_tx_byte(s[i]);
 }
 
 void basic_uart_tx_nl()

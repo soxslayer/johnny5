@@ -1,12 +1,13 @@
-#include "basic_uart.h"
-#include "int_vector.h"
+#include "main.h"
 
-NAKED void main()
+#include "basic_uart.h"
+
+int main()
 {
-  basic_uart_init();
+  basic_uart_tx_str("Johnny 5 alive!!!\r\n");
 
   while (1) {
-    basic_uart_tx_u32(0x1234abcd);
-    basic_uart_tx_nl();
   }
+
+  return 0;
 }
