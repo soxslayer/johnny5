@@ -2,6 +2,7 @@
 
 #include "bits.h"
 #include "clock.h"
+#include "peripheral.h"
 #include "sam3x8e.h"
 
 static u8 nibble_to_ascii(u8 n)
@@ -16,7 +17,7 @@ static u8 nibble_to_ascii(u8 n)
 
 void basic_uart_init()
 {
-  Pmc.pcer0 = _b(8);
+  peripheral_enable_clock(UART_ID);
   /* 115200 baud */
   Uart0.brgr = (clock_speed / 1843200) & 0xffff;
   Uart0.mr = _bm(0x4, 9);

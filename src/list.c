@@ -12,8 +12,7 @@ void list_init(list_t *list)
 
 void list_add(list_t *list, list_node_t *node)
 {
-  ASSERT(list != NULL);
-  ASSERT(node != NULL);
+  ASSERT(list != NULL && node != NULL);
 
   if (*list == NULL) {
     *list = node;
@@ -34,8 +33,7 @@ void list_add(list_t *list, list_node_t *node)
 
 void list_remove(list_t *list, list_node_t *node)
 {
-  ASSERT(list != NULL);
-  ASSERT(node != NULL);
+  ASSERT(list != NULL && node != NULL);
 
   if (*list == node) {
     *list = node->next;

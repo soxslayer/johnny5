@@ -13,9 +13,9 @@ void init_eefc()
 
 void enable_slow_xtal()
 {
-  if (bits_clr(SupC.sr, _b(3))) {
-    SupC.cr = _bm(0xa5, 24) | _b(3);
-    while_bits_clr(SupC.sr, _b(7));
+  if (bits_clr(Supc.sr, _b(3))) {
+    Supc.cr = _bm(0xa5, 24) | _b(3);
+    while_bits_clr(Supc.sr, _b(7));
   }
 }
 

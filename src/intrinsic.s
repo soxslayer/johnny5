@@ -36,8 +36,26 @@ isb:
   isb
   bx lr
 
+.global nop
+.thumb_func
+nop:
+  nop
+  bx lr
+
 .global bkpt
 .thumb_func
 bkpt:
   bkpt
+  bx lr
+
+.global cpsie_i
+.thumb_func
+cpsie_i:
+  cpsie i
+  bx lr
+ 
+.global cpsid_i
+.thumb_func
+cpsid_i:
+  cpsid i
   bx lr

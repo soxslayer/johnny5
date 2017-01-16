@@ -16,10 +16,11 @@
 
 void mem_init();
 
-void *malloc(size_t size);
-void *a_malloc(size_t size, u8 align);
+void * malloc(size_t size);
+void * realloc(void *ptr, size_t size);
+void * a_malloc(size_t size, u8 align);
 void free(void *ptr);
 void a_free(void *align_ptr);
-void memcpy(void *dst, void *src, size_t size);
+void memcpy(void *dst, const void *src, size_t size);
 void memzero(void *ptr, size_t size);
 void print_mem_stats();

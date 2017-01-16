@@ -30,6 +30,7 @@ NAKED void init()
   enable_plla();
   switch_to_plla();
   Scb.actlr = _b(1);
+  bkpt();
 
   wdt_disable();
 

@@ -16,21 +16,21 @@ void spinlock_acquire(spinlock_t *spin)
 {
   ASSERT(spin != NULL);
 
-  dmb();
+  mbarrier();
 
   while (!atomic_cas(spin, 1, 0))
     task_yield();
 
-  dsb();
+  mbarrier();
 }
 
 void spinlock_release(spinlock_t *spin)
 {
   ASSERT(spin != NULL);
 
-  dmb();
+  mbarrier();
 
-  ASSERT(atomic_cas(spin, 0, 1));
+  atomic_cas(spin, 0, 1);
 
-  dsb();
+  mbarrier();
 }

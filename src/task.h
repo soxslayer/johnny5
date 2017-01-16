@@ -6,10 +6,13 @@
 
 #define TASK_SELF NULL
 
-#define TASK_STATUS_INIT 0
-#define TASK_STATUS_RUNNING 1
-#define TASK_STATUS_STOPPED 2
-#define TASK_STATUS_WAITING 3
+typedef enum {
+  TASK_STATUS_INIT,
+  TASK_STATUS_RUNNING,
+  TASK_STATUS_STOPPED,
+  TASK_STATUS_WAIT_PENDING,
+  TASK_STATUS_WAITING
+} task_status_t;
 
 typedef int (*task_entry_t)();
 
@@ -44,20 +47,20 @@ typedef struct _task_t
   } queue;
   u8 *stack_top;
   u8 *psp;
-  u32 run_period_jiffies;
+  heap_t blocking;
+  jiffy_t run_period_jiffies;
   jiffy_t deadline_jiffies;
   int return_value;
   list_t child_tasks;
   struct _task_t *parent_task;
   list_node_t parent_list;
-  int status;
+  task_status_t status;
   char name[9];
 } task_t;
 
 u8 * do_schedule(u8 *psp);
 void sched_init();
 void sched_start(task_entry_t ep, u32 stack_size);
-//void schedule();
 
 task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
                   const char *name);
@@ -68,3 +71,5 @@ void task_schedule(task_t *task);
 void task_unschedule(task_t *task);
 task_t * task_self();
 void task_set_period(task_t *task, u32 period_ms);
+void task_promote(task_t *task, heap_node_t *obj, task_t *promote_to);
+void task_demote(task_t *task, heap_node_t *obj);

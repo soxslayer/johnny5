@@ -50,7 +50,7 @@ static void print_except_state(task_img_t *img)
   basic_uart_tx_u32(Scb.ufsr);
   basic_uart_tx_str(" HFSR: ");
   basic_uart_tx_u32(Scb.hfsr);
-  basic_uart_tx_str("\r\nBFAR: ");
+  basic_uart_tx_str("\r\n BFAR: ");
   basic_uart_tx_u32(Scb.bfar);
 }
 
@@ -64,7 +64,7 @@ void hard_fault_handler(task_img_t *img)
 {
   basic_uart_tx_str("\r\n\r\nhard fault\r\n");
   print_except_state(img);
-  while (1);
+  //while (1);
 }
 
 void memory_management_fault_handler(task_img_t *img)
@@ -107,8 +107,8 @@ static u32 __int_disable_count = 0;
 
 void nvic_disable_int()
 {
-  asm("cpsid i");
-  asm("dsb");
+  cpsid_i();
+  mbarrier();
 
   ++__int_disable_count;
 }
@@ -116,8 +116,8 @@ void nvic_disable_int()
 void nvic_enable_int()
 {
   if (--__int_disable_count == 0) {
-    asm("dsb");
-    asm("cpsie i");
+    mbarrier();
+    cpsie_i();
   }
 }
 

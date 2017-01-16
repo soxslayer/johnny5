@@ -59,6 +59,7 @@ static task_t * create_task_entry(u32 stack_size, u32 run_period_ms,
   tb->status = TASK_STATUS_INIT;
   tb->parent_task = __cur_task;
   list_init(&tb->child_tasks);
+  heap_init(&tb->blocking);
 
   return tb;
 }
@@ -79,20 +80,34 @@ u8 * do_schedule(u8 *psp)
   if (bits_set(SysTick.ctrl, _b(16)))
     ++__jiffies;
 
-  if (__cur_task->status == TASK_STATUS_RUNNING) {
-    if (__jiffies > __cur_task->deadline_jiffies)
-      __cur_task->deadline_jiffies += __cur_task->run_period_jiffies;
+  switch (__cur_task->status) {
+    case TASK_STATUS_RUNNING:
+      if (__jiffies > __cur_task->deadline_jiffies)
+        __cur_task->deadline_jiffies += __cur_task->run_period_jiffies;
 
-    jiffy_t next_run = __cur_task->deadline_jiffies
-                       - __cur_task->run_period_jiffies;
-    if (next_run > __jiffies)
-      heap_insert(&__pending_queue, &__cur_task->queue.run, next_run);
-    else
-      heap_insert(&__run_queue, &__cur_task->queue.run,
-                  __cur_task->deadline_jiffies);
+      jiffy_t next_run = __cur_task->deadline_jiffies
+                         - __cur_task->run_period_jiffies;
+      if (next_run > __jiffies)
+        heap_insert(&__pending_queue, &__cur_task->queue.run, next_run);
+      else
+        heap_insert(&__run_queue, &__cur_task->queue.run,
+                    __cur_task->deadline_jiffies);
+
+      break;
+
+    case TASK_STATUS_WAIT_PENDING:
+      __cur_task->status = TASK_STATUS_WAITING;
+
+      break;
+
+    case TASK_STATUS_STOPPED:
+      list_add(&__dead_queue, &__cur_task->queue.wait);
+
+      break;
+
+    default:
+      break;
   }
-  else
-    list_add(&__dead_queue, &__cur_task->queue.wait);
 
   while (!heap_empty(&__pending_queue)) {
     task_t *t = containerof(heap_root(&__pending_queue), task_t, queue.run);
@@ -219,8 +234,9 @@ void task_schedule(task_t *task)
 
   nvic_disable_int();
 
+  if (task->status == TASK_STATUS_WAITING || task->status == TASK_STATUS_INIT)
+    heap_insert(&__run_queue, &task->queue.run, task->deadline_jiffies);
   task->status = TASK_STATUS_RUNNING;
-  heap_insert(&__run_queue, &task->queue.run, task->deadline_jiffies);
 
   nvic_enable_int();
 }
@@ -231,7 +247,9 @@ void task_unschedule(task_t *task)
 
   nvic_disable_int();
 
-  task->status = TASK_STATUS_WAITING;
+  task->status = TASK_STATUS_WAIT_PENDING;
+  if (task != __cur_task)
+    heap_remove(&__run_queue, &task->queue.run);
 
   nvic_enable_int();
 }

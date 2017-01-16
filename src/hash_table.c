@@ -22,7 +22,7 @@ static u32 hash_entry(hash_table_t *table, hash_table_node_t *node)
   return hash_key(table, key, key_size);
 }
 
-static bool compare_key(void *k1, size_t s1, void *k2, size_t s2)
+static bool compare_key(const void *k1, size_t s1, const void *k2, size_t s2)
 {
   if (s1 != s2)
     return false;
@@ -57,8 +57,7 @@ void hash_table_destroy(hash_table_t *table)
 
 void hash_table_insert(hash_table_t *table, hash_table_node_t *node)
 {
-  ASSERT(table != NULL);
-  ASSERT(node != NULL);
+  ASSERT(table != NULL && node != NULL);
 
   u32 hash = hash_entry(table, node);
   list_add(&table->table[hash], (list_node_t *)node);
@@ -66,8 +65,7 @@ void hash_table_insert(hash_table_t *table, hash_table_node_t *node)
 
 void hash_table_remove(hash_table_t *table, hash_table_node_t *node)
 {
-  ASSERT(table != NULL);
-  ASSERT(node != NULL);
+  ASSERT(table != NULL && node != NULL);
 
   u32 hash = hash_entry(table, node);
   list_remove(&table->table[hash], (list_node_t *)node);
@@ -76,19 +74,17 @@ void hash_table_remove(hash_table_t *table, hash_table_node_t *node)
 hash_table_node_t * hash_table_get(hash_table_t *table, const void *key,
                                    size_t key_size)
 {
-  ASSERT(table != NULL);
-  ASSERT(key != NULL);
-  ASSERT(key_size > 0);
+  ASSERT(table != NULL && key != NULL && key_size > 0);
 
   u32 hash = hash_key(table, key, key_size);
 
   list_foreach(&table->table[hash], node) {
     hash_table_node_t *hnode = (hash_table_node_t *)node;
-    void *key;
-    size_t key_size;
-    table->key_func(node, &key, &key_size);
+    void *node_key;
+    size_t node_key_size;
+    table->key_func(node, &node_key, &node_key_size);
 
-    if (compare_key(key, key_size, key, key_size))
+    if (compare_key(key, key_size, node_key, node_key_size))
       return hnode;
   }
 

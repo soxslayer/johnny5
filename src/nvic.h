@@ -5,6 +5,8 @@
 #define NAKED __attribute__((naked))
 #define ISR __attribute__((isr))
 
+#define IRQ_VECTOR(n) ((n) + 16)
+
 #define NVIC_RESET 1
 #define NVIC_HARD_FAULT 3
 #define NVIC_MEM_MGT_FAULT 4

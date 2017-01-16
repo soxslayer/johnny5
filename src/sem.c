@@ -22,8 +22,24 @@ static void sem_take_post(sem_t *sem)
   }
 
   --sem->value;
-  dsb();
+
   spinlock_release(&sem->guard);
+}
+
+static int sem_try_take_post(sem_t *sem)
+{
+  int r = 0;
+
+  spinlock_acquire(&sem->guard);
+
+  if (sem->value > 0) {
+    --sem->value;
+    r = 1;
+  }
+
+  spinlock_release(&sem->guard);
+
+  return r;
 }
 
 static void sem_give_post(sem_t *sem)
@@ -33,7 +49,8 @@ static void sem_give_post(sem_t *sem)
   ASSERT(sem->max == -1 || sem->value <= sem->max - 1);
 
   ++sem->value;
-  dsb();
+
+  mbarrier();
 
   signal_wake_one(&sem->wait_list);
 
@@ -46,6 +63,13 @@ static void sem_take_pre(sem_t *sem)
     --sem->value;
 }
 
+static int sem_try_take_pre(sem_t *sem)
+{
+  sem_take_pre(sem);
+
+  return 1;
+}
+
 static void sem_give_pre(sem_t *sem)
 {
   ASSERT(sem->max == -1 || sem->value <= sem->max - 1);
@@ -54,11 +78,13 @@ static void sem_give_pre(sem_t *sem)
 }
 
 void (*__sem_take)(sem_t *sem) = sem_take_pre;
+int (*__sem_try_take)(sem_t *sem) = sem_try_take_pre;
 void (*__sem_give)(sem_t *sem) = sem_give_pre;
 
 void sem_post()
 {
   __sem_take = sem_take_post;
+  __sem_try_take = sem_try_take_post;
   __sem_give = sem_give_post;
 }
 
@@ -77,6 +103,13 @@ void sem_take(sem_t *sem)
   ASSERT(sem != NULL);
 
   __sem_take(sem);
+}
+
+int sem_try_take(sem_t *sem)
+{
+  ASSERT(sem != NULL);
+
+  return __sem_try_take(sem);
 }
 
 void sem_give(sem_t *sem)

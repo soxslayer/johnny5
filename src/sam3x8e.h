@@ -4,6 +4,19 @@
 #include "types.h"
 
 typedef volatile struct {
+  void * rpr;
+  u32 rcr;
+  void * tpr;
+  u32 tcr;
+  void * rnpr;
+  u32 rncr;
+  void * tnpr;
+  u32 tncr;
+  u32 ptcr;
+  u32 ptsr;
+} pdc_regs_t;
+
+typedef volatile struct {
   u32 cr;
   u32 mr;
   u32 ier;
@@ -13,9 +26,30 @@ typedef volatile struct {
   const u32 rhr;
   u32 thr;
   u32 brgr;
-} uart_def_t;
+  /* not present for Uart0 */
+  u32 rtor;
+  u32 ttgr;
+  const u32 reserved1[5];
+  u32 fidi;
+  const u32 ner;
+  const u32 reserved2;
+  u32 _if;
+  u32 man;
+  u32 linmr;
+  u32 linir;
+  const u32 reserved3[34];
+  u32 wpmr;
+  const u32 wpsr;
+  const u32 reserved4[4];
+  const u32 version;
+  pdc_regs_t pdc;
+} uart_regs_t;
 
-extern uart_def_t Uart0;
+extern uart_regs_t Uart0;
+extern uart_regs_t Usart0;
+extern uart_regs_t Usart1;
+extern uart_regs_t Usart2;
+extern uart_regs_t Usart3;
 
 typedef volatile struct {
   u32 scer;
@@ -53,9 +87,9 @@ typedef volatile struct {
   u32 pcdr1;
   const u32 pcsr1;
   u32 pcr;
-} pmc_t;
+} pmc_regs_t;
 
-extern pmc_t Pmc;
+extern pmc_regs_t Pmc;
 
 typedef volatile struct {
   u32 per;
@@ -112,32 +146,22 @@ typedef volatile struct {
   const u32 locksr;
   u32 wpmr;
   u32 wpsr;
-} pio_t;
+} pio_regs_t;
 
-extern pio_t PioA;
-extern pio_t PioB;
-extern pio_t PioC;
-extern pio_t PioD;
-extern pio_t PioE;
-extern pio_t PioF;
+extern pio_regs_t PioA;
+extern pio_regs_t PioB;
+extern pio_regs_t PioC;
+extern pio_regs_t PioD;
 
 typedef volatile struct {
   u32 fmr;
   u32 fcr;
   const u32 fsr;
   const u32 frr;
-} eefc_t;
+} eefc_regs_t;
 
-extern eefc_t Effc0;
-extern eefc_t Effc1;
-
-typedef volatile struct {
-  u32 cr;
-  u32 mr;
-  const u32 sr;
-} wdt_t;
-
-extern wdt_t Wdt;
+extern eefc_regs_t Effc0;
+extern eefc_regs_t Effc1;
 
 typedef volatile struct {
   const u32 reserved1[2];
@@ -160,18 +184,26 @@ typedef volatile struct {
   u32 reserved3;
   u32 mmar;
   u32 bfar;
-} scb_t;
+} scb_regs_t;
 
-extern scb_t Scb;
+extern scb_regs_t Scb;
 
 typedef volatile struct {
   u32 ctrl;
   u32 load;
   u32 val;
   const u32 calib;
-} systick_t;
+} systick_regs_t;
 
-extern systick_t SysTick;
+extern systick_regs_t SysTick;
+
+typedef volatile struct {
+  u32 cr;
+  const u32 sr;
+  u32 mr;
+} rstc_regs_t;
+
+extern rstc_regs_t Rstc;
 
 typedef volatile struct {
   u32 cr;
@@ -180,6 +212,73 @@ typedef volatile struct {
   u32 wumr;
   u32 wuir;
   const u32 sr;
-} supc_t;
+} supc_regs_t;
 
-extern supc_t SupC;
+extern supc_regs_t Supc;
+
+typedef volatile struct {
+  u32 cr;
+  u32 mr;
+  const u32 sr;
+} wdt_regs_t;
+
+extern wdt_regs_t Wdt;
+
+typedef volatile struct {
+  u32 mr;
+  u32 ar;
+  const u32 vr;
+  const u32 sr;
+} rtt_regs_t;
+
+extern rtt_regs_t Rtt;
+
+typedef volatile struct {
+  u32 cr;
+  u32 mr;
+  u32 timr;
+  u32 calr;
+  u32 timalr;
+  u32 calalr;
+  const u32 sr;
+  u32 sccr;
+  u32 ier;
+  u32 idr;
+  const u32 imr;
+  const u32 ver;
+  const u32 reserved1[45];
+  u32 wpmr;
+} rtc_regs_t;
+
+extern rtc_regs_t Rtc;
+
+typedef volatile struct {
+  u32 gpbr0;
+  u32 gpbr1;
+  u32 gpbr2;
+  u32 gpbr3;
+  u32 gpbr4;
+  u32 gpbr5;
+  u32 gpbr6;
+  u32 gpbr7;
+} gpbr_regs_t;
+
+extern gpbr_regs_t Gpbr;
+
+typedef volatile struct {
+  u32 iser[2];
+  const u32 reserved1[30];
+  u32 icer[2];
+  const u32 reserved2[30];
+  u32 ispr[2];
+  const u32 reserved3[30];
+  u32 icpr[2];
+  const u32 reserved4[30];
+  const u32 iabr[2];
+  const u32 reserved5[62];
+  u32 ipr[8];
+  const u32 reserved6[696];
+  u32 stir;
+} nvic_regs_t;
+
+extern nvic_regs_t Nvic;

@@ -31,6 +31,9 @@ void chardev_register(chardev_t *dev)
 {
   ASSERT(dev != NULL);
 
+  dev->flags = 0;
+  sem_init(&dev->lock, 1, 1);
+
   sem_take(&__devs_sem);
 
   hash_table_insert(&__devs, &dev->node);
@@ -70,6 +73,8 @@ fd_t open(const char *name)
                                  strnlen(name, CHARDEV_NAME_MAX_LENGTH)),
                                chardev_t, node);
 
+  ASSERT(dev != NULL);
+
   int rc = dev->open(dev);
 
   sem_give(&__devs_sem);
@@ -99,6 +104,8 @@ void close(fd_t fd)
 
   chardev_t *dev = get_dev(fd);
 
+  ASSERT(dev != NULL);
+
   dev->close(dev);
 
   sem_take(&__fds_sem);
@@ -114,6 +121,8 @@ ssize_t read(fd_t fd, void *dst, size_t size)
 
   chardev_t *dev = get_dev(fd);
 
+  ASSERT(dev != NULL && dst != NULL);
+
   ssize_t nread = 0;
 
   do {
@@ -122,7 +131,7 @@ ssize_t read(fd_t fd, void *dst, size_t size)
       return CHARDEV_ERROR;
 
     nread += nr;
-  } while (bits_clr(dev->flags, _bm(1, FLAG_NONBLOCKING)) && nread < size);
+  } while (bits_set(dev->flags, FLAG_BLOCKING) && nread < size);
 
   return nread;
 }
@@ -133,6 +142,8 @@ ssize_t write(fd_t fd, const void *src, size_t size)
 
   chardev_t *dev = get_dev(fd);
 
+  ASSERT(dev != NULL && src != NULL);
+
   ssize_t nwrite = 0;
 
   do {
@@ -141,7 +152,69 @@ ssize_t write(fd_t fd, const void *src, size_t size)
       return CHARDEV_ERROR;
 
     nwrite += nw;
-  } while (bits_clr(dev->flags, _bm(1, FLAG_NONBLOCKING)) && nwrite < size);
+  } while (bits_set(dev->flags, FLAG_BLOCKING) && nwrite < size);
 
   return nwrite;
+}
+
+size_t poll(fd_t fd)
+{
+  ASSERT(fd < MAX_FDS);
+
+  chardev_t *dev = get_dev(fd);
+
+  ASSERT(dev != NULL);
+
+  return dev->poll(dev);
+}
+
+int flush(fd_t fd)
+{
+  ASSERT(fd < MAX_FDS);
+
+  chardev_t *dev = get_dev(fd);
+
+  ASSERT(dev);
+
+  return dev->flush(dev);
+}
+
+int ioctl(fd_t fd, u32 ioop, void *param)
+{
+  ASSERT(fd < MAX_FDS);
+
+  chardev_t *dev = get_dev(fd);
+
+  ASSERT(dev != NULL);
+
+  switch (ioop) {
+    case IOCTL_SETFLAGS: {
+      ASSERT(param != NULL);
+
+      sem_take(&dev->lock);
+
+      int r = set_bits(dev->flags, *((u32 *)param));
+
+      sem_give(&dev->lock);
+
+      return r;
+    }
+
+    case IOCTL_CLRFLAGS: {
+      ASSERT(param != NULL);
+
+      sem_take(&dev->lock);
+
+      int r = clr_bits(dev->flags, *((u32 *)param));
+
+      sem_give(&dev->lock);
+
+      return r;
+    }
+
+    default:
+      return dev->ioctl(dev, ioop, param);
+  }
+
+  return -1;
 }

@@ -2,10 +2,13 @@ SRCS:= \
   assert.c \
   atomic.c \
   basic_uart.c \
+  bits.c \
+  buff.c \
   chardev.c \
   clock.c \
   ctx_switch.s \
   div0.c \
+  event.c \
   fault.s \
   handle_array.c \
   hash_table.c \
@@ -17,11 +20,14 @@ SRCS:= \
   main.c \
   mem.c \
   nvic.c \
+  pdc.c \
+  peripheral.c \
   sem.c \
   signal.c \
   spinlock.c \
   string.c \
   task.c \
+  uart.c \
   uidivmod.s \
   uldivmod.s \
   vec_tbl.c \

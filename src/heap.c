@@ -113,3 +113,13 @@ bool heap_empty(heap_t *heap)
 
   return heap->ins == 0;
 }
+
+bool heap_contains(heap_t *heap, heap_node_t *node)
+{
+  ASSERT(heap != NULL && node != NULL);
+
+  if (node->pos >= heap->ins)
+    return false;
+
+  return heap->heap[node->pos] == node;
+}

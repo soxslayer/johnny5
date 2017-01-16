@@ -69,7 +69,7 @@ void mem_init()
   heap_expand(KB);
 }
 
-void *malloc(size_t size)
+void * malloc(size_t size)
 {
   ctrlblk_t *ablk = NULL;
 
@@ -124,7 +124,25 @@ void *malloc(size_t size)
   return (u8 *)ablk + sizeof(ctrlblk_t);
 }
 
-void *a_malloc(size_t size, u8 align)
+void * realloc(void *ptr, size_t size)
+{
+  ASSERT(ptr != NULL);
+
+  ctrlblk_t *blk = (ctrlblk_t *)((u8 *)ptr - sizeof(ctrlblk_t));
+
+  check_blk(blk);
+
+  if (blk->size < size) {
+    void *n = malloc(size);
+    memcpy(n, ptr, blk->size);
+    free(ptr);
+    ptr = n;
+  }
+
+  return ptr;
+}
+
+void * a_malloc(size_t size, u8 align)
 {
   u8 *ptr = malloc(size + align);
   u8 *align_ptr = (u8 *)((u32)(ptr + align) / align * align);
@@ -134,6 +152,8 @@ void *a_malloc(size_t size, u8 align)
 
 void free(void *ptr)
 {
+  ASSERT(ptr != NULL);
+
   ctrlblk_t *blk = (ctrlblk_t *)((u8 *)ptr - sizeof(ctrlblk_t));
 
   check_blk(blk);
@@ -155,8 +175,11 @@ void a_free(void *align_ptr)
   free(((u8 *)align_ptr) - *ptr);
 }
 
-void memcpy(void *dst, void *src, size_t size)
+void memcpy(void *dst, const void *src, size_t size)
 {
+  ASSERT(dst != NULL);
+  ASSERT(src != NULL);
+
   u8 *bsrc = (u8 *)src;
   u8 *bdst = (u8 *)dst;
 
@@ -176,8 +199,7 @@ void memcpy(void *dst, void *src, size_t size)
 
 void memzero(void *ptr, size_t size)
 {
-  if (ptr == NULL)
-    return;
+  ASSERT_RETURN_VOID(ptr != NULL);
 
   for (u32 i = 0; i < size; ++i)
     ((u8 *)ptr)[i] = 0;
