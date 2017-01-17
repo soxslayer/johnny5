@@ -24,6 +24,7 @@ void list_pop_push_head(list_t *list);
 list_node_t * list_head(list_t *list);
 list_node_t * list_tail(list_t *list);
 bool list_empty(list_t *list);
+void list_clear(list_t *list);
 
 #define list_foreach(l,v) \
   for (list_node_t *v = *(l), *__h = NULL, *__n = v->next; \

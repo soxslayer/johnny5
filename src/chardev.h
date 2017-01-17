@@ -3,7 +3,7 @@
 #include "handle_array.h"
 #include "hash_table.h"
 #include "limits.h"
-#include "sem.h"
+#include "spinlock.h"
 #include "types.h"
 
 #define CHARDEV_NAME_MAX_LENGTH 16
@@ -20,7 +20,7 @@ typedef struct _chardev_t
   hash_table_node_t node;
   char name[CHARDEV_NAME_MAX_LENGTH];
   u32 flags;
-  sem_t lock;
+  spinlock_t lock;
 } chardev_t;
 
 void chardev_init();

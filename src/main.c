@@ -2,44 +2,70 @@
 
 #include "assert.h"
 #include "basic_uart.h"
-#include "chardev.h"
-#include "peripheral.h"
-#include "uart.h"
+#include "spinlock.h"
+#include "task.h"
+
+spinlock_t sem;
+
+int slow()
+{
+  while (1) {
+    spinlock_acquire(&sem);
+
+    basic_uart_tx_str("slow ");
+
+    for (short i = 1; i; ++i);
+
+    spinlock_release(&sem);
+
+    task_checkpoint();
+  }
+
+  return 0;
+}
+
+int medium()
+{
+  while (1) {
+    spinlock_acquire(&sem);
+
+    basic_uart_tx_str("medium ");
+
+    spinlock_release(&sem);
+
+    task_checkpoint();
+  }
+
+  return 0;
+}
+
+int fast()
+{
+  while (1) {
+    spinlock_acquire(&sem);
+
+    basic_uart_tx_str("fast ");
+
+    spinlock_release(&sem);
+
+    task_checkpoint();
+  }
+
+  return 0;
+}
 
 int main()
 {
-  peripheral_enable_clock(PIOA_ID);
+  spinlock_init(&sem);
 
   basic_uart_tx_str("Johnny 5 alive!!!\r\n");
 
-  fd_t uart = open("usart0");
-  ASSERT(uart != INVALID_FD);
+  task_add(slow, 1024, 1000, "slow");
+  task_add(medium, 1024, 100, "medium");
+  task_add(fast, 1024, 10, "fast");
 
-  u32 p = 115200;
-  ioctl(uart, IOCTL_SETBAUD, &p);
-
-  p = IOCTL_NO_PARITY;
-  ioctl(uart, IOCTL_SETPARITY, &p);
-
-  p = IOCTL_1_STOPBIT;
-  ioctl(uart, IOCTL_SETSTOP, &p);
-
-  p = IOCTL_LOCAL_LOOPBACK_MODE;
-  ioctl(uart, IOCTL_SETCHMODE, &p);
-
-  p = IOCTL_8_BIT_CHARLEN;
-  ioctl(uart, IOCTL_SETCHARLEN, &p);
-
-  p = FLAG_BLOCKING;
-  ioctl(uart, IOCTL_SETFLAGS, &p);
-
-  u8 b[11];
   while (1) {
-    write(uart, "asdfasdf\r\n", 10);
-    flush(uart);
-    read(uart, b, 10);
-    b[10] = 0;
-    basic_uart_tx_str((char *)b);
+    task_checkpoint();
   }
 
   return 0;

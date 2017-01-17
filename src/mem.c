@@ -3,15 +3,15 @@
 #include "assert.h"
 #include "basic_uart.h"
 #include "list.h"
-#include "sem.h"
+#include "spinlock.h"
 #include "types.h"
 
 extern char __heap_start__;
 
 void *__brk;
-sem_t __free_list_sem = BINARY_SEM_INIT;
+spinlock_t __free_list_lock;
 list_t __free_list;
-sem_t __alloc_list_sem = BINARY_SEM_INIT;
+spinlock_t __alloc_list_lock;
 list_t __alloc_list;
 
 #define MAGIC1 0xab
@@ -64,6 +64,8 @@ static void heap_expand(size_t amount)
 void mem_init()
 {
   __brk = &__heap_start__;
+  spinlock_init(&__free_list_lock);
+  spinlock_init(&__alloc_list_lock);
   list_init(&__free_list);
   list_init(&__alloc_list);
   heap_expand(KB);
@@ -73,7 +75,7 @@ void * malloc(size_t size)
 {
   ctrlblk_t *ablk = NULL;
 
-  sem_take(&__free_list_sem);
+  spinlock_acquire(&__free_list_lock);
 
   while (ablk == NULL) {
     if (__free_list != NULL) {
@@ -101,9 +103,9 @@ void * malloc(size_t size)
             list_add(&__free_list, &blk->next);
           }
 
-          sem_take(&__alloc_list_sem);
+          spinlock_acquire(&__alloc_list_lock);
           list_add(&__alloc_list, &ablk->next);
-          sem_give(&__alloc_list_sem);
+          spinlock_release(&__alloc_list_lock);
 
           break;
         }
@@ -119,7 +121,7 @@ void * malloc(size_t size)
     }
   }
 
-  sem_give(&__free_list_sem);
+  spinlock_release(&__free_list_lock);
 
   return (u8 *)ablk + sizeof(ctrlblk_t);
 }
@@ -158,13 +160,13 @@ void free(void *ptr)
 
   check_blk(blk);
 
-  sem_take(&__alloc_list_sem);
+  spinlock_acquire(&__alloc_list_lock);
   list_remove(&__alloc_list, &blk->next);
-  sem_give(&__alloc_list_sem);
+  spinlock_release(&__alloc_list_lock);
 
-  sem_take(&__free_list_sem);
+  spinlock_acquire(&__free_list_lock);
   list_add(&__free_list, &blk->next);
-  sem_give(&__free_list_sem);
+  spinlock_release(&__free_list_lock);
 }
 
 void a_free(void *align_ptr)

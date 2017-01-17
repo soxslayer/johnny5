@@ -1,13 +1,11 @@
 #pragma once
 
-#include "list.h"
+#include "heap.h"
 #include "task.h"
-
-#define SIGNAL_INIT { .wait_list = LIST_INIT }
 
 typedef struct _signal_t
 {
-  list_t wait_list;
+  heap_t wait_list;
 } signal_t;
 
 void signal_init(signal_t *sig);

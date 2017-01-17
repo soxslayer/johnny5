@@ -5,9 +5,7 @@
 
 void list_init(list_t *list)
 {
-  ASSERT(list != NULL);
-
-  *list = NULL;
+  list_clear(list);
 }
 
 void list_add(list_t *list, list_node_t *node)
@@ -121,4 +119,11 @@ bool list_empty(list_t *list)
   ASSERT(list != NULL);
 
   return *list == NULL;
+}
+
+void list_clear(list_t *list)
+{
+  ASSERT(list != NULL);
+
+  *list = NULL;
 }

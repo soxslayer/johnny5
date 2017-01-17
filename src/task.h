@@ -38,24 +38,40 @@ typedef struct _task_img_t
   u32 psr;
 } task_img_t;
 
+#define TASK_NAME_SIZE 16
+
+typedef struct _task_priority_t
+{
+  jiffy_t period;
+  jiffy_t deadline;
+} task_priority_t;
+
+typedef struct _task_priority_node_t
+{
+  task_priority_t priority;
+  heap_node_t node;
+} task_priority_node_t;
+
 typedef struct _task_t
 {
   union
   {
-    heap_node_t run;
-    list_node_t wait;
+    heap_node_t heap;
+    list_node_t list;
   } queue;
   u8 *stack_top;
   u8 *psp;
-  heap_t blocking;
-  jiffy_t run_period_jiffies;
-  jiffy_t deadline_jiffies;
+  task_priority_t priority;
+  heap_t promotions;
   int return_value;
   list_t child_tasks;
   struct _task_t *parent_task;
+  struct _task_t *blocking_task;
   list_node_t parent_list;
+  list_node_t spinlock_node;
   task_status_t status;
-  char name[9];
+  char name[TASK_NAME_SIZE + 1];
+  int missed_deadlines;
 } task_t;
 
 u8 * do_schedule(u8 *psp);
@@ -66,10 +82,12 @@ task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
                   const char *name);
 void task_remove(task_t *task);
 void task_yield();
+void task_blocked(task_t *blocker);
+void task_unblocked(task_t *task);
 void task_checkpoint();
 void task_schedule(task_t *task);
 void task_unschedule(task_t *task);
+void task_reschedule(task_t *task);
 task_t * task_self();
+task_priority_t * task_get_priority(task_t *task);
 void task_set_period(task_t *task, u32 period_ms);
-void task_promote(task_t *task, heap_node_t *obj, task_t *promote_to);
-void task_demote(task_t *task, heap_node_t *obj);

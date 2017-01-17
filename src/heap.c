@@ -88,7 +88,7 @@ void heap_insert(heap_t *heap, heap_node_t *node, u32 value)
 
 void heap_remove(heap_t *heap, heap_node_t *node)
 {
-  ASSERT(heap != NULL && node != NULL);
+  ASSERT(heap != NULL && node != NULL && heap_contains(heap, node));
 
   if (node->pos == heap->ins - 1)
     --heap->ins;

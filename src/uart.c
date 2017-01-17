@@ -56,9 +56,9 @@ static buff_t * uart_take_buff(uart_t *uart, bool block)
     if (!block)
       return NULL;
 
-    sem_give(&uart->cdev.lock);
+    spinlock_release(&uart->cdev.lock);
     sem_take(&uart->free_buffers);
-    sem_take(&uart->cdev.lock);
+    spinlock_acquire(&uart->cdev.lock);
   }
 
   int idx = find_clr(uart->alloc_buffers);
@@ -132,13 +132,13 @@ static int uart_open(chardev_t *cdev)
   pdc_reset(&uart->pdc_tx);
   pdc_reset(&uart->pdc_rx);
 
-  sem_take(&cdev->lock);
+  spinlock_acquire(&cdev->lock);
 
   uart_queue_rx_buffs(uart);
   uart->read_buff = NULL;
   uart->write_buff = uart_take_buff(uart, true);
 
-  sem_give(&cdev->lock);
+  spinlock_release(&cdev->lock);
 
   uart_enable_rx_int(uart);
   pdc_enable(&uart->pdc_rx);
@@ -182,7 +182,7 @@ static ssize_t uart_read(chardev_t *cdev, void *dst, size_t size)
   uart_t *uart = CDEV_TO_UART(cdev);
   ssize_t r = 0;
 
-  sem_take(&uart->cdev.lock);
+  spinlock_acquire(&uart->cdev.lock);
 
   if (uart->read_buff == NULL) {
     pdc_swap_buff(&uart->pdc_rx);
@@ -200,7 +200,7 @@ static ssize_t uart_read(chardev_t *cdev, void *dst, size_t size)
 
   uart_queue_rx_buffs(uart);
 
-  sem_give(&uart->cdev.lock);
+  spinlock_release(&uart->cdev.lock);
 
   return r;
 }
@@ -210,7 +210,7 @@ static ssize_t uart_write(chardev_t *cdev, const void *src, size_t size)
   uart_t *uart = CDEV_TO_UART(cdev);
   ssize_t r = 0;
 
-  sem_take(&uart->cdev.lock);
+  spinlock_acquire(&uart->cdev.lock);
 
   if (uart->write_buff == NULL)
     uart->write_buff = uart_take_buff(uart, true);
@@ -220,7 +220,7 @@ static ssize_t uart_write(chardev_t *cdev, const void *src, size_t size)
   if (buff_full(uart->write_buff))
     uart_flush_write_buff(uart);
 
-  sem_give(&uart->cdev.lock);
+  spinlock_release(&uart->cdev.lock);
 
   return r;
 }
@@ -236,12 +236,12 @@ static int uart_flush(chardev_t *cdev)
 
   uart_t *uart = CDEV_TO_UART(cdev);
 
-  sem_take(&cdev->lock);
+  spinlock_acquire(&cdev->lock);
 
   if (uart->write_buff != NULL)
     uart_flush_write_buff(uart);
 
-  sem_give(&cdev->lock);
+  spinlock_release(&cdev->lock);
 
   return 0;
 }
@@ -253,7 +253,7 @@ static int uart_ioctl(chardev_t *cdev, u32 ioop, void *param)
   uart_t *uart = CDEV_TO_UART(cdev);
   int r = -1;
 
-  sem_take(&cdev->lock);
+  spinlock_acquire(&cdev->lock);
 
   switch (ioop) {
     case IOCTL_SETBAUD:
@@ -300,7 +300,7 @@ static int uart_ioctl(chardev_t *cdev, u32 ioop, void *param)
       break;
   }
 
-  sem_give(&cdev->lock);
+  spinlock_release(&cdev->lock);
 
   return r;
 }
@@ -410,17 +410,17 @@ static void uart_dev_init(uart_t *uart)
 
 static void uart_handle_rx_event(uart_t *uart)
 {
-  sem_take(&uart->cdev.lock);
+  spinlock_acquire(&uart->cdev.lock);
 
   uart_queue_rx_buffs(uart);
   uart_enable_rx_int(uart);
 
-  sem_give(&uart->cdev.lock);
+  spinlock_release(&uart->cdev.lock);
 }
 
 static void uart_handle_tx_event(uart_t *uart)
 {
-  sem_take(&uart->cdev.lock);
+  spinlock_acquire(&uart->cdev.lock);
 
   pdc_disable(&uart->pdc_tx);
 
@@ -431,7 +431,7 @@ static void uart_handle_tx_event(uart_t *uart)
   if (pdc_cur_buff_queued(&uart->pdc_tx))
     pdc_enable(&uart->pdc_tx);
 
-  sem_give(&uart->cdev.lock);
+  spinlock_release(&uart->cdev.lock);
 }
 
 static int uart_data_handler()
@@ -457,5 +457,5 @@ void uart_init()
   for (int i = 0; i < NELEMS(__uart_devs); ++i)
     uart_dev_init(&__uart_devs[i]);
 
-  task_add(uart_data_handler, 1024, 1, "uart_isr");
+  task_add(uart_data_handler, 1024, 0, "uart_isr");
 }

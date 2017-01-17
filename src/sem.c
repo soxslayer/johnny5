@@ -7,11 +7,16 @@
 #include "nvic.h"
 #include "task.h"
 
-static void sem_take_post(sem_t *sem)
+static int sem_take_post(sem_t *sem, bool block)
 {
   spinlock_acquire(&sem->guard);
 
   while (sem->value == 0) {
+    if (!block) {
+      spinlock_release(&sem->guard);
+      return 0;
+    }
+
     /* a context switch here could deadlock, so disable ints */
     nvic_disable_int();
     signal_enqueue(&sem->wait_list);
@@ -23,23 +28,11 @@ static void sem_take_post(sem_t *sem)
 
   --sem->value;
 
-  spinlock_release(&sem->guard);
-}
-
-static int sem_try_take_post(sem_t *sem)
-{
-  int r = 0;
-
-  spinlock_acquire(&sem->guard);
-
-  if (sem->value > 0) {
-    --sem->value;
-    r = 1;
-  }
+  mbarrier();
 
   spinlock_release(&sem->guard);
 
-  return r;
+  return 1;
 }
 
 static void sem_give_post(sem_t *sem)
@@ -57,15 +50,15 @@ static void sem_give_post(sem_t *sem)
   spinlock_release(&sem->guard);
 }
 
-static void sem_take_pre(sem_t *sem)
+static int sem_take_pre(sem_t *sem, bool block)
 {
+  if (sem->value == 0)
+    return 0;
+
   if (sem->value > 0)
     --sem->value;
-}
 
-static int sem_try_take_pre(sem_t *sem)
-{
-  sem_take_pre(sem);
+  mbarrier();
 
   return 1;
 }
@@ -75,18 +68,12 @@ static void sem_give_pre(sem_t *sem)
   ASSERT(sem->max == -1 || sem->value <= sem->max - 1);
 
   ++sem->value;
+
+  mbarrier();
 }
 
-void (*__sem_take)(sem_t *sem) = sem_take_pre;
-int (*__sem_try_take)(sem_t *sem) = sem_try_take_pre;
+int (*__sem_take)(sem_t *sem, bool) = sem_take_pre;
 void (*__sem_give)(sem_t *sem) = sem_give_pre;
-
-void sem_post()
-{
-  __sem_take = sem_take_post;
-  __sem_try_take = sem_try_take_post;
-  __sem_give = sem_give_post;
-}
 
 void sem_init(sem_t *sem, u32 init_value, u32 max_value)
 {
@@ -98,18 +85,29 @@ void sem_init(sem_t *sem, u32 init_value, u32 max_value)
   sem->max = max_value;
 }
 
+void sem_binary_init(sem_t *sem)
+{
+  sem_init(sem, 1, 1);
+}
+
+void sem_post()
+{
+  __sem_take = sem_take_post;
+  __sem_give = sem_give_post;
+}
+
 void sem_take(sem_t *sem)
 {
   ASSERT(sem != NULL);
 
-  __sem_take(sem);
+  __sem_take(sem, true);
 }
 
 int sem_try_take(sem_t *sem)
 {
   ASSERT(sem != NULL);
 
-  return __sem_try_take(sem);
+  return __sem_take(sem, false);
 }
 
 void sem_give(sem_t *sem)

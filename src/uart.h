@@ -7,6 +7,7 @@
 #include "pdc.h"
 #include "peripheral.h"
 #include "sam3x8e.h"
+#include "sem.h"
 #include "types.h"
 
 #define NUM_BUFFS 6

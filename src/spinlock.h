@@ -1,8 +1,13 @@
 #pragma once
 
+#include "list.h"
+#include "task.h"
 #include "types.h"
 
-typedef u32 spinlock_t;
+typedef struct _spinlock_t {
+  u32 holder;
+  list_t blocked_list;
+} spinlock_t;
 
 #define SPINLOCK_INIT 0
 

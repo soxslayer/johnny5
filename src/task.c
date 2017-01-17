@@ -10,10 +10,12 @@
 #include "sam3x8e.h"
 #include "sem.h"
 #include "string.h"
+#include "util.h"
 
 #define MS_PER_JIFFY 1
 #define MIN_STACK_SIZE 128
 #define TASK_PSR 0x01000000
+#define MAX_MISSED_DEADLINES 5
 
 #define TASK_REMOVE _b(0)
 
@@ -54,12 +56,14 @@ static task_t * create_task_entry(u32 stack_size, u32 run_period_ms,
 
   tb->stack_top = a_malloc(stack_size, 4);
   tb->psp = tb->stack_top + stack_size;
-  tb->run_period_jiffies = run_period_ms * MS_PER_JIFFY;
-  tb->name[strncpy(tb->name, name, 8)] = 0;
+  tb->priority.period = run_period_ms * MS_PER_JIFFY;
+  heap_init(&tb->promotions);
+  tb->name[strncpy(tb->name, name, TASK_NAME_SIZE)] = 0;
   tb->status = TASK_STATUS_INIT;
   tb->parent_task = __cur_task;
+  tb->blocking_task = NULL;
   list_init(&tb->child_tasks);
-  heap_init(&tb->blocking);
+  tb->missed_deadlines = 0;
 
   return tb;
 }
@@ -82,16 +86,22 @@ u8 * do_schedule(u8 *psp)
 
   switch (__cur_task->status) {
     case TASK_STATUS_RUNNING:
-      if (__jiffies > __cur_task->deadline_jiffies)
-        __cur_task->deadline_jiffies += __cur_task->run_period_jiffies;
+      if (__cur_task->priority.period == 0)
+        heap_insert(&__run_queue, &__cur_task->queue.heap, __jiffies);
+      else {
+        if (__jiffies > __cur_task->priority.deadline)
+          ++__cur_task->missed_deadlines;
 
-      jiffy_t next_run = __cur_task->deadline_jiffies
-                         - __cur_task->run_period_jiffies;
-      if (next_run > __jiffies)
-        heap_insert(&__pending_queue, &__cur_task->queue.run, next_run);
-      else
-        heap_insert(&__run_queue, &__cur_task->queue.run,
-                    __cur_task->deadline_jiffies);
+        ASSERT(__cur_task->missed_deadlines < MAX_MISSED_DEADLINES);
+
+        jiffy_t next_run = __cur_task->priority.deadline
+                           - __cur_task->priority.period;
+        if (next_run > __jiffies)
+          heap_insert(&__pending_queue, &__cur_task->queue.heap, next_run);
+        else
+          heap_insert(&__run_queue, &__cur_task->queue.heap,
+                      __cur_task->priority.deadline);
+      }
 
       break;
 
@@ -101,7 +111,7 @@ u8 * do_schedule(u8 *psp)
       break;
 
     case TASK_STATUS_STOPPED:
-      list_add(&__dead_queue, &__cur_task->queue.wait);
+      list_add(&__dead_queue, &__cur_task->queue.list);
 
       break;
 
@@ -110,16 +120,19 @@ u8 * do_schedule(u8 *psp)
   }
 
   while (!heap_empty(&__pending_queue)) {
-    task_t *t = containerof(heap_root(&__pending_queue), task_t, queue.run);
-    if (t->deadline_jiffies > __jiffies
-        && t->deadline_jiffies - t->run_period_jiffies > __jiffies)
+    task_t *t = containerof(heap_root(&__pending_queue), task_t, queue.heap);
+    if (t->priority.deadline > __jiffies
+        && t->priority.deadline - t->priority.period > __jiffies)
       break;
-    heap_remove(&__pending_queue, &t->queue.run);
-    heap_insert(&__run_queue, &t->queue.run, t->deadline_jiffies);
+    heap_remove(&__pending_queue, &t->queue.heap);
+    heap_insert(&__run_queue, &t->queue.heap, t->priority.deadline);
   }
 
-  __cur_task = containerof(heap_root(&__run_queue), task_t, queue.run);
-  heap_remove(&__run_queue, &__cur_task->queue.run);
+  __cur_task = containerof(heap_root(&__run_queue), task_t, queue.heap);
+  while (__cur_task->blocking_task != NULL)
+    __cur_task = __cur_task->blocking_task;
+
+  heap_remove(&__run_queue, &__cur_task->queue.heap);
 
   return __cur_task->psp;
 }
@@ -137,10 +150,12 @@ void sched_init()
 
 void sched_start(task_entry_t ep, u32 stack_size)
 {
+  ASSERT(ep != NULL);
+
   task_add(ep, stack_size, U32_MAX, "idle");
 
-  task_t *task = containerof(heap_root(&__run_queue), task_t, queue.run);
-  heap_remove(&__run_queue, &task->queue.run);
+  task_t *task = containerof(heap_root(&__run_queue), task_t, queue.heap);
+  heap_remove(&__run_queue, &task->queue.heap);
 
   /* the first task requires a special image to call first_task_entry */
   task_img_t *img = (task_img_t *)task->psp;
@@ -159,6 +174,8 @@ void sched_start(task_entry_t ep, u32 stack_size)
 task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
                   const char *name)
 {
+  ASSERT(ep != NULL);
+
   task_t *task = create_task_entry(stack_size, run_period_ms, name);
 
   task_img_t img;
@@ -173,7 +190,7 @@ task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
 
   nvic_disable_int();
 
-  task->deadline_jiffies = __jiffies + task->run_period_jiffies;
+  task->priority.deadline = __jiffies + task->priority.period;
   task_schedule(task);
 
   nvic_enable_int();
@@ -186,11 +203,34 @@ void task_yield()
   asm("svc 0");
 }
 
+void task_blocked(task_t *blocker)
+{
+  nvic_disable_int();
+
+  __cur_task->blocking_task = blocker;
+
+  nvic_enable_int();
+}
+
+void task_unblocked(task_t *task)
+{
+  ASSERT(task != NULL);
+
+  nvic_disable_int();
+
+  task->blocking_task = NULL;
+
+  nvic_enable_int();
+}
+
 void task_checkpoint()
 {
   nvic_disable_int();
 
-  __cur_task->deadline_jiffies += __cur_task->run_period_jiffies;
+  ASSERT(heap_empty(&__cur_task->promotions));
+
+  __cur_task->priority.deadline += __cur_task->priority.period;
+  __cur_task->missed_deadlines = 0;
 
   nvic_enable_int();
 
@@ -235,7 +275,8 @@ void task_schedule(task_t *task)
   nvic_disable_int();
 
   if (task->status == TASK_STATUS_WAITING || task->status == TASK_STATUS_INIT)
-    heap_insert(&__run_queue, &task->queue.run, task->deadline_jiffies);
+    heap_insert(&__run_queue, &task->queue.heap, task->priority.deadline);
+
   task->status = TASK_STATUS_RUNNING;
 
   nvic_enable_int();
@@ -248,8 +289,22 @@ void task_unschedule(task_t *task)
   nvic_disable_int();
 
   task->status = TASK_STATUS_WAIT_PENDING;
-  if (task != __cur_task)
-    heap_remove(&__run_queue, &task->queue.run);
+  if (task != __cur_task && task->status == TASK_STATUS_RUNNING)
+    heap_remove(&__run_queue, &task->queue.heap);
+
+  nvic_enable_int();
+}
+
+void task_reschedule(task_t *task)
+{
+  ASSERT(task != NULL);
+
+  nvic_disable_int();
+
+  if (task->status == TASK_STATUS_RUNNING) {
+    task_unschedule(task);
+    task_schedule(task);
+  }
 
   nvic_enable_int();
 }
@@ -259,11 +314,21 @@ task_t * task_self()
   return __cur_task;
 }
 
+task_priority_t * task_get_priority(task_t *task)
+{
+  ASSERT(task != NULL);
+
+  return &task->priority;
+}
+
 void task_set_period(task_t *task, u32 period_ms)
 {
+  ASSERT(task != NULL);
+
   nvic_disable_int();
 
-  task->run_period_jiffies = period_ms * MS_PER_JIFFY;
+  task->priority.period = period_ms * MS_PER_JIFFY;
+  task_reschedule(task);
 
   nvic_enable_int();
 }

@@ -8,10 +8,10 @@
 
 #define MAX_FDS 32
 
-sem_t __devs_sem = BINARY_SEM_INIT;
+spinlock_t __devs_lock;
 hash_table_t __devs;
 
-sem_t __fds_sem = BINARY_SEM_INIT;
+spinlock_t __fds_sem;
 handle_array_t __fds;
 
 static void get_chardev_key(hash_table_node_t *node, void **key, size_t *size)
@@ -25,6 +25,8 @@ void chardev_init()
 {
   hash_table_create(&__devs, 8, get_chardev_key);
   handle_array_create(&__fds, MAX_FDS);
+  spinlock_init(&__devs_lock);
+  spinlock_init(&__fds_sem);
 }
 
 void chardev_register(chardev_t *dev)
@@ -32,42 +34,42 @@ void chardev_register(chardev_t *dev)
   ASSERT(dev != NULL);
 
   dev->flags = 0;
-  sem_init(&dev->lock, 1, 1);
+  spinlock_init(&dev->lock);
 
-  sem_take(&__devs_sem);
+  spinlock_acquire(&__devs_lock);
 
   hash_table_insert(&__devs, &dev->node);
 
-  sem_give(&__devs_sem);
+  spinlock_release(&__devs_lock);
 }
 
 void chardev_unregister(chardev_t *dev)
 {
   ASSERT(dev != NULL);
 
-  sem_take(&__devs_sem);
+  spinlock_acquire(&__devs_lock);
 
   hash_table_remove(&__devs, &dev->node);
 
-  sem_give(&__devs_sem);
+  spinlock_release(&__devs_lock);
 }
 
 
 
 static chardev_t * get_dev(fd_t fd)
 {
-  sem_take(&__fds_sem);
+  spinlock_acquire(&__fds_sem);
 
   chardev_t *dev = handle_array_get(&__fds, fd);
 
-  sem_give(&__fds_sem);
+  spinlock_release(&__fds_sem);
 
   return dev;
 }
 
 fd_t open(const char *name)
 {
-  sem_take(&__devs_sem);
+  spinlock_acquire(&__devs_lock);
 
   chardev_t *dev = containerof(hash_table_get(&__devs, name,
                                  strnlen(name, CHARDEV_NAME_MAX_LENGTH)),
@@ -77,16 +79,16 @@ fd_t open(const char *name)
 
   int rc = dev->open(dev);
 
-  sem_give(&__devs_sem);
+  spinlock_release(&__devs_lock);
 
   if (rc == CHARDEV_ERROR)
     return INVALID_FD;
 
-  sem_take(&__fds_sem);
+  spinlock_acquire(&__fds_sem);
 
   fd_t fd = handle_array_alloc(&__fds, dev);
 
-  sem_give(&__fds_sem);
+  spinlock_release(&__fds_sem);
 
   if (fd == INVALID_FD) {
     dev->close(dev);
@@ -108,11 +110,11 @@ void close(fd_t fd)
 
   dev->close(dev);
 
-  sem_take(&__fds_sem);
+  spinlock_acquire(&__fds_sem);
 
   handle_array_free(&__fds, fd);
 
-  sem_give(&__fds_sem);
+  spinlock_release(&__fds_sem);
 }
 
 ssize_t read(fd_t fd, void *dst, size_t size)
@@ -191,11 +193,11 @@ int ioctl(fd_t fd, u32 ioop, void *param)
     case IOCTL_SETFLAGS: {
       ASSERT(param != NULL);
 
-      sem_take(&dev->lock);
+      spinlock_acquire(&dev->lock);
 
       int r = set_bits(dev->flags, *((u32 *)param));
 
-      sem_give(&dev->lock);
+      spinlock_release(&dev->lock);
 
       return r;
     }
@@ -203,11 +205,11 @@ int ioctl(fd_t fd, u32 ioop, void *param)
     case IOCTL_CLRFLAGS: {
       ASSERT(param != NULL);
 
-      sem_take(&dev->lock);
+      spinlock_acquire(&dev->lock);
 
       int r = clr_bits(dev->flags, *((u32 *)param));
 
-      sem_give(&dev->lock);
+      spinlock_release(&dev->lock);
 
       return r;
     }
