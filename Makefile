@@ -1,4 +1,4 @@
-SRCS:= \
+SRCS := \
   assert.c \
   atomic.c \
   basic_uart.c \
@@ -17,25 +17,28 @@ SRCS:= \
   init.c \
   intrinsic.s \
   list.c \
-  main.c \
+  longjmp.c \
   mem.c \
   nvic.c \
   pdc.c \
   peripheral.c \
+  pio.c \
   sem.c \
   signal.c \
   spinlock.c \
   string.c \
+  syscall.c \
   task.c \
   uart.c \
   uidivmod.s \
   uldivmod.s \
   vec_tbl.c \
+  volcfg.c \
   wdt.c
 
-vpath %.h src
-vpath %.c src
-vpath %.s src
+vpath %.h kernel
+vpath %.c kernel
+vpath %.s kernel
 
 ARMGNU:=arm-none-eabi
 
@@ -76,6 +79,11 @@ ASFLAGS:= \
   -mcpu=cortex-m3 \
   -mthumb \
   -g
+
+ifdef TEST
+SRCS += test_main.c
+CPPFLAGS += -DTEST=1
+endif
 
 OBJS:=$(SRCS:%.c=%.o)
 OBJS:=$(OBJS:%.s=%.o)
