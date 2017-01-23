@@ -3,34 +3,10 @@
 #include "mem.h"
 #include "syscall.h"
 
-task_img_t * syscall_save_ctx(task_img_t *img)
-{
-  jump_ctx_t *dst = (jump_ctx_t *)img->r1;
-  memcpy(&dst->img, img, sizeof(*img));
-
-  return img;
-}
-
-task_img_t * syscall_restore_ctx(task_img_t *img)
-{
-  jump_ctx_t *src = (jump_ctx_t *)img->r1;
-  u8 *dst_sp = (u8 *)src->img.sp;
-
-  memcpy(dst_sp, &src->img, sizeof(src->img));
-
-  return (task_img_t *)dst_sp;
-}
-
-void longjmp_init()
-{
-  syscall_register(SYSCALL_SAVE_CTX, syscall_save_ctx);
-  syscall_register(SYSCALL_RESTORE_CTX, syscall_restore_ctx);
-}
-
 void longjmp(jump_ctx_t *ctx)
 {
   ctx->ret = 1;
-  syscall(SYSCALL_RESTORE_CTX, ctx);
+  syscall(SYSCALL_RESTORE_CTX, &ctx->img);
 }
 
 

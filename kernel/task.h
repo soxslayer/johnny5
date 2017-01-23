@@ -21,6 +21,7 @@ typedef int (*task_entry_t)();
 typedef struct _task_img_t
 {
   /* manually saved by context systick interrupt */
+  u32 except_lr;
   u32 sp;
   u32 r4;
   u32 r5;
@@ -71,7 +72,7 @@ struct _task_t;
 
 typedef struct _scheduler_context_t
 {
-  u8 *psp;
+  task_img_t *run_ctx;
 
   jiffy_t wake_jiffies;
 
@@ -110,10 +111,10 @@ typedef struct _task_t
   signal_id_t active_signal;
 } task_t;
 
-u8 * do_schedule(u8 *psp);
 void sched_init();
 void sched_start(task_entry_t ep, u32 stack_size);
 
+void task_init();
 task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
                   const char *name);
 void task_remove(task_t *task);

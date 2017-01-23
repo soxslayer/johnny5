@@ -1,5 +1,6 @@
 #include "syscall.h"
 
+#include "ctx_switch.h"
 #include "nvic.h"
 #include "mem.h"
 
@@ -17,27 +18,7 @@ static task_img_t * syscall_handle(task_img_t *img)
   return img;
 }
 
-static NAKED void svc_exception_entry()
-{
-  asm ("ands r1, lr, #4\r\n"
-       "itte eq\r\n"
-       "mrseq r0, msp\r\n"
-       "subeq sp, sp, #36\r\n"
-       "mrsne r0, psp\r\n"
-       "mov r2, r0\r\n"
-       "sub r2, r2, #36\r\n"
-       "stmdb r0!, {r2,r4-r11}\r\n"
-       "push {r1,lr}\r\n"
-       "bl syscall_handle\r\n"
-       "pop {r1,lr}\r\n"
-       "ldm r0, {r2,r4-r11}\r\n"
-       "add r2, r2, #36\r\n"
-       "cmp r1, #0\r\n"
-       "ite eq\r\n"
-       "msreq msp, r2\r\n"
-       "msrne psp, r2\r\n"
-       "bx lr");
-}
+DEFINE_CTX_HANDLER(svc_exception_entry, syscall_handle);
 
 void syscall_init()
 {
@@ -50,11 +31,13 @@ void syscall_register(syscall_id_t num, syscall_t handler)
     __syscalls[num] = handler;
 }
 
-NAKED void syscall(syscall_id_t num, void *data)
+void NAKED syscall(syscall_id_t num, void *data)
 {
   if (num == SYSCALL_MAX)
-    return;
+    asm ("bx lr");
 
-  asm ("svc 0\r\n"
-       "bx lr\r\n");
+  asm ("mov r0, %0\r\n"
+       "mov r1, %1\r\n"
+       "svc 0\r\n"
+       "bx lr\r\n" : : "r" (num), "r" (data));
 }

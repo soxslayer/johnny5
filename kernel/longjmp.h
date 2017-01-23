@@ -13,7 +13,7 @@ void longjmp_init();
 #define setjmp(c) \
 ({ \
   (c)->ret = 0; \
-  syscall(SYSCALL_SAVE_CTX, (c)); \
+  syscall(SYSCALL_SAVE_CTX, &(c)->img); \
   (c)->ret; \
 })
 void longjmp(jump_ctx_t *ctx);

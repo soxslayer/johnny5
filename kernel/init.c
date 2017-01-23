@@ -48,7 +48,7 @@ NAKED void init()
 
   nvic_init();
   syscall_init();
-  longjmp_init();
+  task_init();
 
   basic_uart_init();
 

@@ -36,9 +36,9 @@ SRCS := \
   volcfg.c \
   wdt.c
 
-vpath %.h kernel
-vpath %.c kernel
-vpath %.s kernel
+vpath %.h kernel johnny5
+vpath %.c kernel johnny5
+vpath %.s kernel johnny5
 
 ARMGNU:=arm-none-eabi
 
@@ -81,8 +81,11 @@ ASFLAGS:= \
   -g
 
 ifdef TEST
-SRCS += test_main.c
-CPPFLAGS += -DTEST=1
+  SRCS += test_main.c
+  CPPFLAGS += -DTEST=1
+else
+  SRCS += main.c
+  CPPFLAGS += -I./kernel
 endif
 
 OBJS:=$(SRCS:%.c=%.o)

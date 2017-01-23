@@ -10,11 +10,15 @@
 #include "sam3x8e.h"
 #include "sem.h"
 #include "string.h"
+#include "syscall.h"
 #include "util.h"
 
 #define MS_PER_JIFFY 1
 #define MIN_STACK_SIZE 128
 #define TASK_PSR 0x01000000
+#define TASK_EXCEPT_RETURN_LR 0xfffffff1 // Thread mode PSP stack lr value
+#define TASK_EXCEPT_RETURN_THREAD_MODE 0x8
+#define TASK_EXCEPT_RETURN_PSP 0x4
 #define MAX_MISSED_DEADLINES 5
 
 
@@ -53,11 +57,6 @@ static task_t * create_task_entry(u32 stack_size, u32 run_period_ms,
   if (stack_size < MIN_STACK_SIZE)
     stack_size = MIN_STACK_SIZE;
 
-  tb->sched.psp = tb->stack_top + stack_size;
-  tb->sched.status = TASK_STATUS_INIT;
-
-  tb->sig_sched.status = TASK_STATUS_INIT;
-
   tb->stack_top = a_malloc(stack_size, 4);
   tb->priority.period = run_period_ms * MS_PER_JIFFY;
   tb->blocking_task = NULL;
@@ -65,6 +64,11 @@ static task_t * create_task_entry(u32 stack_size, u32 run_period_ms,
   tb->parent_task = __cur_task;
   list_init(&tb->child_tasks);
   tb->active_signal = SIG_NONE;
+
+  tb->sched.run_ctx = (task_img_t *)(tb->stack_top + stack_size);
+  tb->sched.status = TASK_STATUS_INIT;
+
+  tb->sig_sched.status = TASK_STATUS_INIT;
 
   for (u32 i = 0; i < NELEMS(tb->sig_mask); ++i) {
     tb->sig_mask[i] = 0;
@@ -88,11 +92,15 @@ static scheduler_context_t * task_get_scheduler_context(task_t *task)
 static void set_task_image(task_t *task, task_img_t *img)
 {
   img->psr = TASK_PSR;
+  img->except_lr = TASK_EXCEPT_RETURN_LR
+                   | TASK_EXCEPT_RETURN_THREAD_MODE
+                   | TASK_EXCEPT_RETURN_PSP;
 
   scheduler_context_t *ctx = task_get_scheduler_context(task);
 
-  ctx->psp -= sizeof(*img);
-  memcpy(ctx->psp, img, sizeof(*img));
+  ctx->run_ctx = (task_img_t *)((u8 *)ctx->run_ctx - sizeof(*img));
+  memcpy(ctx->run_ctx, img, sizeof(*img));
+  ctx->run_ctx->sp = (u32)ctx->run_ctx;
 }
 
 /* thread context signal entry point */
@@ -119,36 +127,38 @@ static void task_handle_signal(task_t *task)
 {
   signal_id_t sig_num = task_get_pending_signal(task);
 
-  clr_bits(__cur_task->sig_pending[sig_num / 32], _b(sig_num % 32));
+  if (sig_num != SIG_NONE) {
+    clr_bits(__cur_task->sig_pending[sig_num / 32], _b(sig_num % 32));
 
-  if (task->sig_handlers[sig_num] != NULL) {
-    task_img_t sig_img;
-    memzero(&sig_img, sizeof(sig_img));
-    sig_img.r0 = (u32)task->sig_handlers[sig_num];
-    sig_img.r1 = sig_num;
-    sig_img.ret = (u32)signal_entry;
+    if (task->sig_handlers[sig_num] != NULL) {
+      task_img_t sig_img;
+      memzero(&sig_img, sizeof(sig_img));
+      sig_img.r0 = (u32)task->sig_handlers[sig_num];
+      sig_img.r1 = sig_num;
+      sig_img.ret = (u32)signal_entry;
 
-    task->active_signal = sig_num;
+      task->active_signal = sig_num;
 
-    task->sig_sched.psp = task->sched.psp;
-    task->sig_sched.status = TASK_STATUS_RUNNING;
+      task->sig_sched.run_ctx = task->sched.run_ctx;
+      task->sig_sched.status = TASK_STATUS_RUNNING;
 
-    set_task_image(task, &sig_img);
+      set_task_image(task, &sig_img);
+    }
   }
 }
 
-u8 * do_schedule(u8 *psp)
+task_img_t * do_schedule(task_img_t *run_ctx)
 {
   scheduler_context_t *ctx = task_get_scheduler_context(__cur_task);
 
-  /* if done signal handling discard the task context given in psp */
+  /* if done signal handling discard the task context given in run_ctx */
   if (__cur_task->active_signal != SIG_NONE
       && __cur_task->sig_sched.status == TASK_STATUS_STOPPED) {
     __cur_task->active_signal = SIG_NONE;
     ctx = task_get_scheduler_context(__cur_task);
   }
   else
-    ctx->psp = psp;
+    ctx->run_ctx = run_ctx;
 
   if (bits_set(SysTick.ctrl, _b(16)))
     ++__jiffies;
@@ -216,13 +226,11 @@ u8 * do_schedule(u8 *psp)
   }
 
   __cur_task = containerof(heap_root(&__run_queue), task_t, queue.heap);
-  ctx = task_get_scheduler_context(__cur_task);
 
-  if (__cur_task->active_signal == SIG_NONE) {
+  if (__cur_task->active_signal == SIG_NONE)
     task_handle_signal(__cur_task);
-    /* the scheduler context will change if signal handling has begun */
-    ctx = task_get_scheduler_context(__cur_task);
-  }
+
+  ctx = task_get_scheduler_context(__cur_task);
 
   if (ctx->status == TASK_STATUS_RUNNING) {
     while (__cur_task->blocking_task != NULL) {
@@ -233,7 +241,32 @@ u8 * do_schedule(u8 *psp)
 
   heap_remove(&__run_queue, &__cur_task->queue.heap);
 
-  return ctx->psp;
+  return ctx->run_ctx;
+}
+
+DEFINE_CTX_HANDLER(sched_systick, do_schedule);
+
+static task_img_t * syscall_task_yield(task_img_t *img)
+{
+  return (task_img_t *)do_schedule(img);
+}
+
+static task_img_t * syscall_save_ctx(task_img_t *img)
+{
+  task_img_t *dst = (task_img_t *)img->r1;
+  memcpy(dst, img, sizeof(*dst));
+
+  return img;
+}
+
+static task_img_t *syscall_restore_ctx(task_img_t *img)
+{
+  task_img_t *src = (task_img_t *)img->r1;
+  u8 *dst_sp = (u8 *)img->sp;
+
+  memcpy(dst_sp, src, sizeof(*src));
+
+  return (task_img_t *)dst_sp;
 }
 
 void sched_init()
@@ -241,8 +274,7 @@ void sched_init()
   heap_create(&__run_queue);
   heap_create(&__pending_queue);
   list_init(&__dead_queue);
-  nvic_set_handler(NVIC_SYSTICK, ctx_switch);
-  nvic_set_handler(NVIC_SVCALL, ctx_switch);
+  nvic_set_handler(NVIC_SYSTICK, sched_systick);
   Scb.shpr2 = 0;
   Scb.shpr3 = 0;
 }
@@ -257,7 +289,7 @@ void sched_start(task_entry_t ep, u32 stack_size)
   heap_remove(&__run_queue, &task->queue.heap);
 
   /* the first task requires a special image to call first_task_entry */
-  task_img_t *img = (task_img_t *)task->sched.psp;
+  task_img_t *img = (task_img_t *)task->sched.run_ctx;
   img->r2 = img->r1;
   img->r1 = img->r0;
   img->r0 = img->ret;
@@ -265,9 +297,16 @@ void sched_start(task_entry_t ep, u32 stack_size)
 
   __cur_task = task;
 
-  ctx_exec(task->sched.psp);
+  syscall(SYSCALL_RESTORE_CTX, img);
 
   PANIC();
+}
+
+void task_init()
+{
+  syscall_register(SYSCALL_TASK_YIELD, syscall_task_yield);
+  syscall_register(SYSCALL_SAVE_CTX, syscall_save_ctx);
+  syscall_register(SYSCALL_RESTORE_CTX, syscall_restore_ctx);
 }
 
 task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
@@ -284,10 +323,10 @@ task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
   img.ret = (u32)task_entry;
   set_task_image(task, &img);
 
+  nvic_disable_int();
+
   if (__cur_task != NULL)
     list_add(&__cur_task->child_tasks, &task->parent_list);
-
-  nvic_disable_int();
 
   task->priority.deadline = __jiffies + task->priority.period;
   heap_insert(&__run_queue, &task->queue.heap, task->priority.deadline);
@@ -299,7 +338,7 @@ task_t * task_add(task_entry_t ep, u32 stack_size, u32 run_period_ms,
 
 void task_yield()
 {
-  asm("svc 0");
+  syscall(SYSCALL_TASK_YIELD, NULL);
 }
 
 void task_blocked(task_t *blocker, list_t *wait_list)
